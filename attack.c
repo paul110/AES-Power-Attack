@@ -5,7 +5,6 @@
 #define maxSampleSize   500
 #define tSize           1500
 
-
 FILE* target_out = NULL; // buffered attack target input  stream
 FILE* target_in  = NULL; // buffered attack target output stream
 pid_t pid        = 0;    // process ID (of either parent or child) from fork
@@ -35,23 +34,8 @@ unsigned char s[256] = {
     0x8C, 0xA1, 0x89, 0x0D, 0xBF, 0xE6, 0x42, 0x68, 0x41, 0x99, 0x2D, 0x0F, 0xB0, 0x54, 0xBB, 0x16
  };
 
-uint8_t mul_const(uint8_t t, int x);
-uint8_t getByteVal(double* cor, double *max );
-void printTrace(uint8_t* state);
 
-void printState(uint8_t state[16]);
-void collectMeasurements(uint8_t* m, uint8_t* c, uint8_t* traces);
-void increaseSample(uint8_t* m, uint8_t* c, uint8_t* traces);
-void testKey(uint8_t* m, uint8_t* c, uint8_t k[16]);
-void computeCorelation(uint8_t* ham, uint8_t* traces, double* cor);
-void calculateV(int index, uint8_t* v, uint8_t* m);
-void getHammingWeights(uint8_t* ham, uint8_t* v);
-
-double corelation(uint8_t* x, uint8_t* y);
-int hammingWeight(uint8_t x);
-
-// use exhausting search to find the remaining bytes
-void exhaustSearch(uint8_t key[16], uint8_t wrongBytes[16], uint8_t* c, uint8_t* m){
+void exhaustSearch(uint8_t* key, uint8_t wrongBytes[16], const uint8_t* c, const uint8_t* m){
   for(int i=0; i<16; i++){
     if(wrongBytes[i] == 1){
       wrongBytes[i] = 0;
@@ -138,14 +122,14 @@ void attack() {
 }
 
 // transpose the needed column into an array for easy access
-void getTracesColumn(int index, uint8_t* col, uint8_t* traces){
+void getTracesColumn(const int index, uint8_t* col, const uint8_t* traces){
   for(int i=0; i<currentSampleSize; i++){
     col[i] = traces[i*tSize + index];
   }
 }
 
 // compute intermediate values
-void calculateV(int index, uint8_t* v, uint8_t* m){
+void calculateV(int index, uint8_t* v, const uint8_t* m){
   uint8_t plaintext_byte;
   for(int i=0; i<currentSampleSize; i++){
     plaintext_byte = m[i*16 + index];
@@ -156,7 +140,7 @@ void calculateV(int index, uint8_t* v, uint8_t* m){
 }
 
 // compute hamming weights of intermediate values
-void getHammingWeights(uint8_t* ham, uint8_t* v){
+void getHammingWeights(uint8_t* ham, const uint8_t* v){
   for(int i=0; i<currentSampleSize; i++)
     for(int j=0; j<256; j++){
       ham[i*256 + j] = hammingWeight(v[i*256 + j]);
@@ -164,7 +148,7 @@ void getHammingWeights(uint8_t* ham, uint8_t* v){
 }
 
 // cmpute corelation between 2 arrays
-double corelation(uint8_t* x, uint8_t* y){
+double corelation(const uint8_t* x, const uint8_t* y){
   double xMean=0, yMean=0;
 
   // compute mean of x
@@ -224,16 +208,13 @@ void computeCorelation(uint8_t* ham, uint8_t* traces, double* cor){
 }
 
 // test the key and terminate program if key is correct
-void testKey(uint8_t* m, uint8_t* c, uint8_t k[16]){
+void testKey(const uint8_t m[16], const uint8_t c[16], const uint8_t k[16]){
   uint8_t result[16];
-  uint8_t message[16];
-  for(int i=0; i<16; i++)
-    message[i] = m[i];
 
   // encrypt message using guessed key
   AES_KEY rk;
   AES_set_encrypt_key( k, 128, &rk );
-  AES_encrypt( message, result, &rk );
+  AES_encrypt( m, result, &rk );
 
   // test ciphertexts
   if( !memcmp( result, c, 16 * sizeof( uint8_t ) ) ) {
@@ -297,7 +278,7 @@ int interact(const uint8_t* m, uint8_t* s, uint8_t* c){
 }
 
 // generate random messages for multiple measurements
-void generateRandomMessage(uint8_t* m, int size){
+void generateRandomMessages(uint8_t* m, const int size){
   // open file to read random bytes from
   FILE *fp = fopen("/dev/urandom", "r");
   int character;
@@ -316,7 +297,7 @@ void generateRandomMessage(uint8_t* m, int size){
 void increaseSample(uint8_t* m, uint8_t* c, uint8_t* traces){
   currentSampleSize = currentSampleSize + sampleIncrease;
 
-  generateRandomMessage(m+(currentSampleSize-sampleIncrease)*16, sampleIncrease);
+  generateRandomMessages(m+(currentSampleSize-sampleIncrease)*16, sampleIncrease);
   for(int i=currentSampleSize-sampleIncrease; i< currentSampleSize; i++){
     interact(m+i*16, traces+i*tSize, c+i*16);
   }
@@ -324,7 +305,7 @@ void increaseSample(uint8_t* m, uint8_t* c, uint8_t* traces){
 
 // collect measurements and ciphertexts for multiple random messages
 void collectMeasurements(uint8_t* m, uint8_t* c, uint8_t* traces){
-    generateRandomMessage(m, currentSampleSize);
+    generateRandomMessages(m, currentSampleSize);
     for(int i=0; i< currentSampleSize; i++){
       interact(m+i*16, traces+i*tSize, c+i*16);
     }
@@ -383,7 +364,7 @@ int main( int argc, char* argv[] ){
  }
 }
 
-void printState(uint8_t* state){
+void printState(const uint8_t* state){
   for(int i=0; i<16; i++){
     printf("%02X ", state[i]);
     if(i%4 == 3)
